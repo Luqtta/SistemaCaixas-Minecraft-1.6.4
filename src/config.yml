@@ -1,0 +1,58 @@
+settings:
+  menu-title: "&8Caixas"
+  menu-size: 27
+  roulette-title: "&8Roleta"
+  rewards-title: "&8Premios: {caixa}"
+  buy-lore:
+    - "&7Preco: &a$ {preco}"
+    - "&7Clique ESQ: &fComprar"
+    - "&7Clique DIR: &fVer premios"
+  buy-lore-admin-extra:
+    - "&8(Admin: compra sem custo)"
+  can-afford-lore:
+    - "&aVoce consegue comprar!"
+  cannot-afford-lore:
+    - "&cVoce nao tem dinheiro!"
+  crate-item:
+    material: CHEST
+    name: "&eCaixa &7({id})"
+    lore:
+      - "&7Botao direito para abrir"
+      - "&8Caixa: {id}"
+
+crates:
+  normal:
+    enabled: true
+    display:
+      name: "&aNormal"
+      desc:
+        - "&7Premios comuns"
+      icon: CHEST
+    price: 1000.0
+    rewards:
+      - item: "DIAMOND_SWORD 1 name:&bEspada_Top lore:&7Corta_muito"
+        chance: 5.0
+      - item: "IRON_INGOT 16"
+        chance: 40.0
+      - item: "GOLD_INGOT 8"
+        chance: 55.0
+
+  epico:
+    enabled: true
+    display:
+      name: "&dEpica"
+      desc:
+        - "&7Premios melhores"
+      icon: ENDER_CHEST
+    price: 5000.0
+    rewards: []
+
+  lendario:
+    enabled: true
+    display:
+      name: "&6Lendaria"
+      desc:
+        - "&7Premios insanos"
+      icon: DIAMOND_BLOCK
+    price: 15000.0
+    rewards: []

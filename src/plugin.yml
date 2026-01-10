@@ -1,0 +1,25 @@
+name: SistemaCaixas
+main: me.avelar.caixas.Main
+version: 1.0
+author: Avelar
+softdepend: [Vault]
+
+commands:
+  caixas:
+    description: Menu e admin de caixas
+    usage: /caixas
+    permission: caixas.use
+
+  caixa:
+    description: Ajuda do sistema de caixas
+    usage: /caixa
+    permission: caixas.use
+
+permissions:
+  caixas.admin:
+    description: Permissao administrativa das caixas
+    default: op
+
+  caixas.use:
+    description: Permissao para usar o sistema de caixas
+    default: true
