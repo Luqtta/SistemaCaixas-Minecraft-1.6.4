@@ -8,8 +8,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
@@ -144,6 +144,7 @@ public class Listeners implements Listener {
             return;
         }
 
+
         String start = rewardsTitleStart();
         if (start != null && start.length() > 0 && title.startsWith(start)) {
             e.setCancelled(true);
@@ -154,6 +155,7 @@ public class Listeners implements Listener {
             e.setCancelled(true);
             return;
         }
+
 
         if (isEditItemsGui(title)) {
             int raw = e.getRawSlot();
@@ -187,10 +189,8 @@ public class Listeners implements Listener {
             ItemStack clicked = e.getCurrentItem();
             ItemStack cursor = p.getItemOnCursor();
 
-
             if (isAir(clicked) && isReal(cursor)) {
                 ItemStack stack = cursor.clone();
-
                 p.setItemOnCursor(null);
 
                 p.closeInventory();
@@ -201,11 +201,11 @@ public class Listeners implements Listener {
                 return;
             }
 
+
             if (!isAir(clicked)) {
                 Integer idx = getRewardIndexFromGuiItem(clicked);
                 if (idx == null) idx = raw;
                 if (idx < 0 || idx >= crate.rewards.size()) return;
-
 
                 if (e.isRightClick()) {
                     p.closeInventory();
@@ -215,6 +215,7 @@ public class Listeners implements Listener {
                     p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&7Para cancelar digite &fcancelar&7."));
                     return;
                 }
+
 
                 if (e.isLeftClick()) {
                     p.closeInventory();
@@ -314,6 +315,7 @@ public class Listeners implements Listener {
             return;
         }
 
+
         final PendingChance pending = pendingAddChance.get(p.getUniqueId());
         if (pending != null) {
             e.setCancelled(true);
@@ -326,19 +328,15 @@ public class Listeners implements Listener {
                     @Override public void run() {
                         ItemStack toReturn = pending.item.clone();
 
-
                         Map<Integer, ItemStack> leftover = p.getInventory().addItem(toReturn);
                         if (leftover != null && !leftover.isEmpty()) {
                             for (ItemStack rem : leftover.values()) {
                                 p.getWorld().dropItemNaturally(p.getLocation(), rem);
                             }
                         }
-
                         p.updateInventory();
 
                         final Crate crate = plugin.getCrateManager().getCrate(pending.crateId);
-
-                        
                         Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
                             @Override public void run() {
                                 if (crate != null) p.openInventory(Gui.buildEditItems(plugin, crate));
@@ -439,6 +437,13 @@ public class Listeners implements Listener {
 
         e.setCancelled(true);
 
+
+        if (opening.contains(p.getUniqueId())) {
+            p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cAguarde terminar a roleta para abrir outra caixa."));
+            Util.playFirstAvailable(p, 1f, 0.8f, "NOTE_BASS", "NOTE_BASS_GUITAR", "VILLAGER_NO");
+            return;
+        }
+
         String id = Util.getCrateId(hand);
         Crate crate = plugin.getCrateManager().getCrate(id);
 
@@ -448,11 +453,6 @@ public class Listeners implements Listener {
         }
         if (crate.rewards.isEmpty()) {
             p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cEssa caixa ainda nao tem premios configurados."));
-            return;
-        }
-        if (opening.contains(p.getUniqueId())) {
-            p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cAguarde terminar a roleta."));
-            Util.playFirstAvailable(p, 1f, 0.8f, "NOTE_BASS", "NOTE_BASS_GUITAR", "VILLAGER_NO");
             return;
         }
 
@@ -474,14 +474,8 @@ public class Listeners implements Listener {
 
         if (rouletteTitle().equals(e.getInventory().getTitle())) {
             if (opening.contains(p.getUniqueId())) {
-                Bukkit.getScheduler().runTask(plugin, new Runnable() {
-                    @Override public void run() {
-                        p.openInventory(Gui.buildRoulette(plugin));
-                        p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cAguarde terminar a roleta."));
-                    }
-                });
+                p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cA roleta ainda está girando... aguarde!"));
             }
-            return;
         }
     }
 
@@ -493,6 +487,7 @@ public class Listeners implements Listener {
         final ItemStack glass = new ItemStack(Material.THIN_GLASS, 1);
         Util.setNameLore(glass, "&7", Arrays.asList("&7"));
         for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, glass);
+
         final ItemStack star = new ItemStack(Material.NETHER_STAR, 1);
         Util.setNameLore(star, "&e&lITEM GANHO", Arrays.asList("&7O premio aparece no &fmeio&7."));
         inv.setItem(4, star);
@@ -555,7 +550,9 @@ public class Listeners implements Listener {
                     } catch (Throwable ignored) {}
                     inv.setItem(13, preview);
 
+
                     p.getInventory().addItem(prize.clone());
+
 
                     try {
                         String itemName;
@@ -563,7 +560,7 @@ public class Listeners implements Listener {
                         if (prizeMeta != null && prizeMeta.hasDisplayName()) itemName = prizeMeta.getDisplayName();
                         else itemName = prize.getType().toString();
                         int amountWon = prize.getAmount();
-                        p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&aVoce ganhou: &f" + itemName + " &ax" + amountWon + " &7(Chance: &f" + win.chance + "%&7)"));
+                        p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&aVoce ganhou: &f" + itemName + " &ax" + amountWon + " &7(Chance: " + Util.getChanceColor(win.chance) + win.chance + "%&7)"));
                     } catch (Throwable ignored) {}
 
                     inv.setItem(13, null);
@@ -607,7 +604,14 @@ public class Listeners implements Listener {
             ItemMeta meta = it.getItemMeta();
             List<String> lore = (meta != null && meta.hasLore()) ? new ArrayList<String>(meta.getLore()) : new ArrayList<String>();
             lore.add(Util.color("&8"));
-            lore.add(Util.color("&7Chance: &f" + r.chance));
+            lore.add(Util.color("&7Chance: " + Util.getChanceColor(r.chance) + r.chance));
+            if (r.chance < 10.0) {
+                String lbl = Util.getChanceLabel(r.chance);
+                if (lbl != null) {
+                    lore.add(Util.color("&8"));
+                    lore.add(Util.color(lbl));
+                }
+            }
             if (meta != null) {
                 meta.setLore(lore);
                 it.setItemMeta(meta);
