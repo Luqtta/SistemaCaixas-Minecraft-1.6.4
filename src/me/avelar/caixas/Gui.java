@@ -29,7 +29,10 @@ public class Gui {
             if (!crate.enabled) continue;
             if (idx >= slots.length) break;
 
-            ItemStack icon = plugin.getCrateManager().createIconItem(crate);
+            ItemStack base = plugin.getCrateManager().createIconItem(crate);
+            if (base == null) continue;
+
+            ItemStack icon = base.clone();
 
             List<String> lore = new ArrayList<String>();
             if (crate.desc != null) lore.addAll(crate.desc);
@@ -50,7 +53,8 @@ public class Gui {
             lore.add("&8crate:" + crate.id);
 
             Util.setNameLore(icon, "&7Caixa &a" + crate.displayName, lore);
-            inv.setItem(slots[idx], icon);
+
+            inv.setItem(slots[idx], icon.clone());
             idx++;
         }
 
@@ -70,22 +74,23 @@ public class Gui {
             List<String> lore = new ArrayList<String>();
 
             lore.add("&7Chance: " + Util.getChanceColor(r.chance) + r.chance);
+            lore.add("&8");
             if (r.chance < 10.0) {
-                lore.add("&8");
                 String lbl = Util.getChanceLabel(r.chance);
                 if (lbl != null) lore.add(lbl);
-            } else {
-                lore.add("&8");
             }
             lore.add("&eDIR: &aEditar chance");
             lore.add("&eESQ: &cRemover");
             lore.add("&8rid:" + rewardIndex);
 
-            Util.setNameLore(it,
-                    (it.hasItemMeta() && it.getItemMeta().hasDisplayName())
-                            ? it.getItemMeta().getDisplayName()
-                            : "&fItem",
-                    lore);
+            String name;
+            if (it.hasItemMeta() && it.getItemMeta() != null && it.getItemMeta().hasDisplayName()) {
+                name = it.getItemMeta().getDisplayName();
+            } else {
+                name = "&f" + it.getType().toString();
+            }
+
+            Util.setNameLore(it, name, lore);
 
             inv.setItem(slot, it);
             slot++;
@@ -118,6 +123,7 @@ public class Gui {
 
             ItemStack it = r.item.clone();
             List<String> lore = new ArrayList<String>();
+
             lore.add("&7Chance: " + Util.getChanceColor(r.chance) + r.chance);
             if (r.chance < 10.0) {
                 lore.add("&8");
@@ -125,11 +131,14 @@ public class Gui {
                 if (lbl != null) lore.add(lbl);
             }
 
-            Util.setNameLore(it,
-                    (it.hasItemMeta() && it.getItemMeta().hasDisplayName())
-                            ? it.getItemMeta().getDisplayName()
-                            : "&fItem",
-                    lore);
+            String name;
+            if (it.hasItemMeta() && it.getItemMeta() != null && it.getItemMeta().hasDisplayName()) {
+                name = it.getItemMeta().getDisplayName();
+            } else {
+                name = "&f" + it.getType().toString();
+            }
+
+            Util.setNameLore(it, name, lore);
 
             inv.setItem(slot++, it);
         }
