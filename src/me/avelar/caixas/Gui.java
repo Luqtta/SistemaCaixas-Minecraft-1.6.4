@@ -69,8 +69,14 @@ public class Gui {
             ItemStack it = r.item.clone();
             List<String> lore = new ArrayList<String>();
 
-            lore.add("&7Chance: &f" + r.chance);
-            lore.add("&8");
+            lore.add("&7Chance: " + Util.getChanceColor(r.chance) + r.chance);
+            if (r.chance < 10.0) {
+                lore.add("&8");
+                String lbl = Util.getChanceLabel(r.chance);
+                if (lbl != null) lore.add(lbl);
+            } else {
+                lore.add("&8");
+            }
             lore.add("&eDIR: &aEditar chance");
             lore.add("&eESQ: &cRemover");
             lore.add("&8rid:" + rewardIndex);
@@ -112,7 +118,12 @@ public class Gui {
 
             ItemStack it = r.item.clone();
             List<String> lore = new ArrayList<String>();
-            lore.add("&7Chance: &f" + r.chance);
+            lore.add("&7Chance: " + Util.getChanceColor(r.chance) + r.chance);
+            if (r.chance < 10.0) {
+                lore.add("&8");
+                String lbl = Util.getChanceLabel(r.chance);
+                if (lbl != null) lore.add(lbl);
+            }
 
             Util.setNameLore(it,
                     (it.hasItemMeta() && it.getItemMeta().hasDisplayName())
