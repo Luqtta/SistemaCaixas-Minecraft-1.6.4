@@ -14,6 +14,8 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.FireworkMeta;
@@ -27,16 +29,33 @@ public class Listeners implements Listener {
     private final Main plugin;
     private final Random rnd = new Random();
 
-    // players currently rolling
+    // Players currently rolling
     private final Set<UUID> opening = new HashSet<UUID>();
 
-    // edit flows
+    // Pending prize (anti-logout)
+    private final Map<UUID, PendingWin> pendingWin = new HashMap<UUID, PendingWin>();
+
+    // Edit flows
     private final Map<UUID, PendingChance> pendingAddChance = new HashMap<UUID, PendingChance>();
     private final Map<UUID, PendingEditChance> pendingEditChance = new HashMap<UUID, PendingEditChance>();
     private final Map<UUID, PendingRemove> pendingRemove = new HashMap<UUID, PendingRemove>();
 
     public Listeners(Main plugin) {
         this.plugin = plugin;
+    }
+
+    private static class PendingWin {
+        final String crateId;
+        final String crateDisplay;
+        final ItemStack prize;
+        final double chance;
+
+        PendingWin(String crateId, String crateDisplay, ItemStack prize, double chance) {
+            this.crateId = crateId;
+            this.crateDisplay = crateDisplay;
+            this.prize = prize;
+            this.chance = chance;
+        }
     }
 
     private boolean isAdmin(Player p) {
@@ -83,29 +102,80 @@ public class Listeners implements Listener {
         if (meta == null || !meta.hasLore()) return null;
 
         for (String line : meta.getLore()) {
-            String raw = org.bukkit.ChatColor.stripColor(line).toLowerCase().trim();
-            if (raw.startsWith("rid:")) {
-                try {
-                    return Integer.parseInt(raw.substring(4).trim());
-                } catch (Exception ignored) {}
-            }
+            if (line == null) continue;
+
+            String raw = org.bukkit.ChatColor.stripColor(line).toLowerCase();
+
+            int pos = raw.indexOf("rid:");
+            if (pos == -1) continue;
+
+            String after = raw.substring(pos + 4);
+
+            after = after.replaceAll("[^0-9]", "");
+
+            if (after.length() == 0) continue;
+
+            try {
+                return Integer.parseInt(after);
+            } catch (Exception ignored) {}
         }
         return null;
     }
 
-    /* =========================
-       UX: chance color
-     ========================= */
+
+
+
     private String chanceColor(double chance) {
-        if (chance >= 50.0) return "&a";     // comum
-        if (chance >= 10.0) return "&e";     // incomum
-        if (chance >= 2.0)  return "&6";     // raro
-        return "&d&l";                       // MUITO raro (roxo bold)
+        if (chance >= 50.0) return "&a";     
+        if (chance >= 10.0) return "&e";    
+        if (chance >= 2.0)  return "&6";     
+        return "&d&l";                   
     }
 
-    /* =========================
-       GUI protections
-     ========================= */
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent e) {
+        Player p = e.getPlayer();
+
+        opening.remove(p.getUniqueId());
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent e) {
+        final Player p = e.getPlayer();
+        final UUID id = p.getUniqueId();
+
+        final PendingWin pend = pendingWin.remove(id);
+        if (pend == null) return;
+
+        Bukkit.getScheduler().runTask(plugin, new Runnable() {
+            @Override public void run() {
+
+                Map<Integer, ItemStack> leftover = p.getInventory().addItem(pend.prize.clone());
+                if (leftover != null && !leftover.isEmpty()) {
+                    for (ItemStack rem : leftover.values()) {
+                        p.getWorld().dropItemNaturally(p.getLocation(), rem);
+                    }
+                }
+                p.updateInventory();
+
+
+                try {
+                    String itemName;
+                    ItemMeta m = pend.prize.getItemMeta();
+                    if (m != null && m.hasDisplayName()) itemName = m.getDisplayName();
+                    else itemName = pend.prize.getType().toString();
+
+                    p.sendMessage(Util.CAIXAS_PREFIX + Util.color(
+                            "&aVoce recebeu um premio pendente da caixa &f" + pend.crateDisplay +
+                                    "&a: &f" + itemName + " &ax" + pend.prize.getAmount() +
+                                    " &7(Chance: " + chanceColor(pend.chance) + pend.chance + "%&7)"
+                    ));
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
 
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent e) {
@@ -133,7 +203,6 @@ public class Listeners implements Listener {
         Player p = (Player) e.getWhoClicked();
         String title = e.getInventory().getTitle();
 
-        // MENU
         if (title.equals(menuTitle())) {
             e.setCancelled(true);
 
@@ -161,20 +230,17 @@ public class Listeners implements Listener {
             return;
         }
 
-        // REWARDS LIST
         String start = rewardsTitleStart();
         if (start != null && start.length() > 0 && title.startsWith(start)) {
             e.setCancelled(true);
             return;
         }
 
-        // ROULETTE - block clicks
         if (title.equals(rouletteTitle())) {
             e.setCancelled(true);
             return;
         }
 
-        // EDIT ITEMS GUI
         if (isEditItemsGui(title)) {
             int raw = e.getRawSlot();
             int topSize = e.getInventory().getSize();
@@ -182,9 +248,17 @@ public class Listeners implements Listener {
 
             if (!clickedTop) return;
 
+
             if (e.isShiftClick()) {
                 e.setCancelled(true);
                 p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cShift-click desativado aqui."));
+                return;
+            }
+
+
+            if (e.getClick() == ClickType.NUMBER_KEY || e.getHotbarButton() >= 0) {
+                e.setCancelled(true);
+                p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cTeclas 1-9 desativadas aqui."));
                 return;
             }
 
@@ -207,7 +281,6 @@ public class Listeners implements Listener {
             ItemStack clicked = e.getCurrentItem();
             ItemStack cursor = p.getItemOnCursor();
 
-            // ADD NEW ITEM (empty slot + cursor item)
             if (isAir(clicked) && isReal(cursor)) {
                 ItemStack stack = cursor.clone();
                 p.setItemOnCursor(null);
@@ -220,11 +293,20 @@ public class Listeners implements Listener {
                 return;
             }
 
-            // EXISTING ITEM
             if (!isAir(clicked)) {
+
                 Integer idx = getRewardIndexFromGuiItem(clicked);
-                if (idx == null) idx = raw;
-                if (idx < 0 || idx >= crate.rewards.size()) return;
+
+                if (idx == null) {
+                    p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cNao foi possivel identificar o item (RID invalido)."));
+                    p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&7Reabra o menu e tente novamente."));
+                    return;
+                }
+
+                if (idx < 0 || idx >= crate.rewards.size()) {
+                    p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cItem invalido (fora da lista). Reabra o menu."));
+                    return;
+                }
 
                 if (e.isRightClick()) {
                     p.closeInventory();
@@ -247,16 +329,12 @@ public class Listeners implements Listener {
         }
     }
 
-    /* =========================
-       Chat flows (add/edit/remove)
-     ========================= */
 
     @EventHandler
     public void onChat(AsyncPlayerChatEvent e) {
         final Player p = e.getPlayer();
         final String msg = e.getMessage().trim();
 
-        // REMOVE confirm
         final PendingRemove rem = pendingRemove.get(p.getUniqueId());
         if (rem != null) {
             e.setCancelled(true);
@@ -293,7 +371,6 @@ public class Listeners implements Listener {
             return;
         }
 
-        // EDIT chance
         final PendingEditChance edit = pendingEditChance.get(p.getUniqueId());
         if (edit != null) {
             e.setCancelled(true);
@@ -339,12 +416,10 @@ public class Listeners implements Listener {
             return;
         }
 
-        // ADD new item chance
         final PendingChance pending = pendingAddChance.get(p.getUniqueId());
         if (pending != null) {
             e.setCancelled(true);
 
-            // FIX cancel: return item to inventory, reopen GUI 1 tick later
             if (msg.equalsIgnoreCase("cancelar")) {
                 pendingAddChance.remove(p.getUniqueId());
                 p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cAcao cancelada."));
@@ -414,10 +489,6 @@ public class Listeners implements Listener {
         plugin.getCrateManager().reload();
     }
 
-    /* =========================
-       Crate usage
-     ========================= */
-
     private void buyCrate(Player p, Crate crate) {
         boolean admin = isAdmin(p);
 
@@ -467,7 +538,6 @@ public class Listeners implements Listener {
 
         e.setCancelled(true);
 
-        // MODO A: não abre outra caixa enquanto gira
         if (opening.contains(p.getUniqueId())) {
             p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cAguarde terminar a roleta para abrir outra caixa."));
             Util.playFirstAvailable(p, 1f, 0.8f, "NOTE_BASS", "NOTE_BASS_GUITAR", "VILLAGER_NO");
@@ -497,7 +567,7 @@ public class Listeners implements Listener {
         openRoulette(p, crate);
     }
 
-    // MODO A: NÃO força reabrir inventário
+
     @EventHandler
     public void onClose(InventoryCloseEvent e) {
         if (!(e.getPlayer() instanceof Player)) return;
@@ -511,12 +581,13 @@ public class Listeners implements Listener {
         }
     }
 
-    /* =========================
-       ROULETTE
-     ========================= */
-
     private void openRoulette(final Player p, final Crate crate) {
-        opening.add(p.getUniqueId());
+        final UUID uid = p.getUniqueId();
+        opening.add(uid);
+
+        final Reward rolled = plugin.getCrateManager().roll(crate, rnd);
+        final PendingWin store = new PendingWin(crate.id, crate.displayName, rolled.item.clone(), rolled.chance);
+        pendingWin.put(uid, store);
 
         final Inventory inv = Gui.buildRoulette(plugin);
 
@@ -546,6 +617,13 @@ public class Listeners implements Listener {
             int stopAt = 85;
 
             @Override public void run() {
+
+                if (!p.isOnline()) {
+                    cancel();
+                    opening.remove(uid);
+                    return;
+                }
+
                 tickCounter++;
                 if (tickCounter % stepEvery != 0) return;
 
@@ -566,35 +644,40 @@ public class Listeners implements Listener {
                 if (spins >= stopAt) {
                     cancel();
 
-                    // item final (o do meio da strip)
-                    final Reward win = getAt(strip, 4);
-                    final ItemStack prize = win.item.clone();
 
-                    // limpa e mostra preview
+                    final PendingWin pend = pendingWin.get(uid);
+                    if (pend == null) {
+
+                        opening.remove(uid);
+                        if (p.getOpenInventory() != null) p.closeInventory();
+                        return;
+                    }
+
+                    final ItemStack prize = pend.prize.clone();
+
                     for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, glass);
                     inv.setItem(4, star);
                     inv.setItem(22, star.clone());
 
                     final ItemStack preview = prize.clone();
                     preview.setAmount(1);
-
                     try {
                         ItemMeta pm = preview.getItemMeta();
                         if (pm != null) {
                             List<String> lore = pm.hasLore() ? new ArrayList<String>(pm.getLore()) : new ArrayList<String>();
                             lore.add(Util.color("&8"));
-                            lore.add(Util.color("&7Chance: " + chanceColor(win.chance) + win.chance + "%"));
+                            lore.add(Util.color("&7Chance: " + chanceColor(pend.chance) + pend.chance + "%"));
+                            if (pend.chance < 2.0) lore.add(Util.color("&8✦ &d&lMUITO RARO &8✦"));
+                            else if (pend.chance < 10.0) lore.add(Util.color("&8✦ &6RARO &8✦"));
                             lore.add(Util.color("&8(Preview - aguarde)"));
                             pm.setLore(lore);
                             preview.setItemMeta(pm);
                         }
                     } catch (Throwable ignored) {}
 
-                    // ✅ MOSTRA O ITEM NO MEIO
                     inv.setItem(13, preview);
                     p.updateInventory();
 
-                    // mensagem (só pro player)
                     try {
                         String itemName;
                         ItemMeta prizeMeta = prize.getItemMeta();
@@ -602,19 +685,27 @@ public class Listeners implements Listener {
                         else itemName = prize.getType().toString();
                         int amountWon = prize.getAmount();
                         p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&aVoce ganhou: &f" + itemName + " &ax" + amountWon
-                                + " &7(Chance: " + chanceColor(win.chance) + win.chance + "%&7)"));
+                                + " &7(Chance: " + chanceColor(pend.chance) + pend.chance + "%&7)"));
                     } catch (Throwable ignored) {}
 
-                    if (win.chance < 25.0) {
+                    if (pend.chance < 25.0) {
                         spawnFireworks(p, 3);
                         broadcastRare(p, crate);
                     }
 
-                    // ✅ ENTREGA O PRÊMIO SÓ DEPOIS (pra não “sumir” o preview)
+
                     Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
                         @Override public void run() {
-                            // entrega
-                            Map<Integer, ItemStack> leftover = p.getInventory().addItem(prize.clone());
+                            opening.remove(uid);
+
+                            if (!p.isOnline()) {
+                                return;
+                            }
+
+                            PendingWin still = pendingWin.remove(uid);
+                            if (still == null) return;
+
+                            Map<Integer, ItemStack> leftover = p.getInventory().addItem(still.prize.clone());
                             if (leftover != null && !leftover.isEmpty()) {
                                 for (ItemStack rem : leftover.values()) {
                                     p.getWorld().dropItemNaturally(p.getLocation(), rem);
@@ -622,11 +713,9 @@ public class Listeners implements Listener {
                             }
                             p.updateInventory();
 
-                            // fecha e libera
-                            opening.remove(p.getUniqueId());
                             if (p.getOpenInventory() != null) p.closeInventory();
                         }
-                    }, 40L); // 2 segundos (40 ticks)
+                    }, 40L);
                 }
             }
         }.runTaskTimer(plugin, 1L, 1L);
