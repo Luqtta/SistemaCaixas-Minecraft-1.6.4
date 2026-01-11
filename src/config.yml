@@ -37,7 +37,7 @@ crates:
       - item: "GOLD_INGOT 8"
         chance: 55.0
 
-  epico:
+  epica:
     enabled: true
     display:
       name: "&dEpica"
@@ -47,7 +47,7 @@ crates:
     price: 5000.0
     rewards: []
 
-  lendario:
+  lendaria:
     enabled: true
     display:
       name: "&6Lendaria"
@@ -56,3 +56,4 @@ crates:
       icon: DIAMOND_BLOCK
     price: 15000.0
     rewards: []
+
