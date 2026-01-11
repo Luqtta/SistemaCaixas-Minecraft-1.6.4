@@ -27,8 +27,10 @@ public class Listeners implements Listener {
     private final Main plugin;
     private final Random rnd = new Random();
 
+    // players currently rolling
     private final Set<UUID> opening = new HashSet<UUID>();
 
+    // edit flows
     private final Map<UUID, PendingChance> pendingAddChance = new HashMap<UUID, PendingChance>();
     private final Map<UUID, PendingEditChance> pendingEditChance = new HashMap<UUID, PendingEditChance>();
     private final Map<UUID, PendingRemove> pendingRemove = new HashMap<UUID, PendingRemove>();
@@ -91,6 +93,20 @@ public class Listeners implements Listener {
         return null;
     }
 
+    /* =========================
+       UX: chance color
+     ========================= */
+    private String chanceColor(double chance) {
+        if (chance >= 50.0) return "&a";     // comum
+        if (chance >= 10.0) return "&e";     // incomum
+        if (chance >= 2.0)  return "&6";     // raro
+        return "&d&l";                       // MUITO raro (roxo bold)
+    }
+
+    /* =========================
+       GUI protections
+     ========================= */
+
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent e) {
         if (!(e.getWhoClicked() instanceof Player)) return;
@@ -117,6 +133,7 @@ public class Listeners implements Listener {
         Player p = (Player) e.getWhoClicked();
         String title = e.getInventory().getTitle();
 
+        // MENU
         if (title.equals(menuTitle())) {
             e.setCancelled(true);
 
@@ -144,19 +161,20 @@ public class Listeners implements Listener {
             return;
         }
 
-
+        // REWARDS LIST
         String start = rewardsTitleStart();
         if (start != null && start.length() > 0 && title.startsWith(start)) {
             e.setCancelled(true);
             return;
         }
 
+        // ROULETTE - block clicks
         if (title.equals(rouletteTitle())) {
             e.setCancelled(true);
             return;
         }
 
-
+        // EDIT ITEMS GUI
         if (isEditItemsGui(title)) {
             int raw = e.getRawSlot();
             int topSize = e.getInventory().getSize();
@@ -189,6 +207,7 @@ public class Listeners implements Listener {
             ItemStack clicked = e.getCurrentItem();
             ItemStack cursor = p.getItemOnCursor();
 
+            // ADD NEW ITEM (empty slot + cursor item)
             if (isAir(clicked) && isReal(cursor)) {
                 ItemStack stack = cursor.clone();
                 p.setItemOnCursor(null);
@@ -201,7 +220,7 @@ public class Listeners implements Listener {
                 return;
             }
 
-
+            // EXISTING ITEM
             if (!isAir(clicked)) {
                 Integer idx = getRewardIndexFromGuiItem(clicked);
                 if (idx == null) idx = raw;
@@ -216,7 +235,6 @@ public class Listeners implements Listener {
                     return;
                 }
 
-
                 if (e.isLeftClick()) {
                     p.closeInventory();
                     pendingRemove.put(p.getUniqueId(), new PendingRemove(crate.id, idx));
@@ -229,11 +247,16 @@ public class Listeners implements Listener {
         }
     }
 
+    /* =========================
+       Chat flows (add/edit/remove)
+     ========================= */
+
     @EventHandler
     public void onChat(AsyncPlayerChatEvent e) {
         final Player p = e.getPlayer();
         final String msg = e.getMessage().trim();
 
+        // REMOVE confirm
         final PendingRemove rem = pendingRemove.get(p.getUniqueId());
         if (rem != null) {
             e.setCancelled(true);
@@ -270,6 +293,7 @@ public class Listeners implements Listener {
             return;
         }
 
+        // EDIT chance
         final PendingEditChance edit = pendingEditChance.get(p.getUniqueId());
         if (edit != null) {
             e.setCancelled(true);
@@ -315,11 +339,12 @@ public class Listeners implements Listener {
             return;
         }
 
-
+        // ADD new item chance
         final PendingChance pending = pendingAddChance.get(p.getUniqueId());
         if (pending != null) {
             e.setCancelled(true);
 
+            // FIX cancel: return item to inventory, reopen GUI 1 tick later
             if (msg.equalsIgnoreCase("cancelar")) {
                 pendingAddChance.remove(p.getUniqueId());
                 p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cAcao cancelada."));
@@ -334,6 +359,7 @@ public class Listeners implements Listener {
                                 p.getWorld().dropItemNaturally(p.getLocation(), rem);
                             }
                         }
+
                         p.updateInventory();
 
                         final Crate crate = plugin.getCrateManager().getCrate(pending.crateId);
@@ -366,7 +392,7 @@ public class Listeners implements Listener {
             Bukkit.getScheduler().runTask(plugin, new Runnable() {
                 @Override public void run() {
                     plugin.getCrateManager().addReward(pending.crateId, pending.item, finalChance, false, Reward.Rarity.COMMON);
-                    p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&aItem adicionado com chance &f" + finalChance + "&a."));
+                    p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&aItem adicionado com chance &f" + finalChance + "%&a."));
 
                     Crate crate = plugin.getCrateManager().getCrate(pending.crateId);
                     if (crate != null) p.openInventory(Gui.buildEditItems(plugin, crate));
@@ -387,6 +413,10 @@ public class Listeners implements Listener {
         plugin.saveConfig();
         plugin.getCrateManager().reload();
     }
+
+    /* =========================
+       Crate usage
+     ========================= */
 
     private void buyCrate(Player p, Crate crate) {
         boolean admin = isAdmin(p);
@@ -437,7 +467,7 @@ public class Listeners implements Listener {
 
         e.setCancelled(true);
 
-
+        // MODO A: não abre outra caixa enquanto gira
         if (opening.contains(p.getUniqueId())) {
             p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&cAguarde terminar a roleta para abrir outra caixa."));
             Util.playFirstAvailable(p, 1f, 0.8f, "NOTE_BASS", "NOTE_BASS_GUITAR", "VILLAGER_NO");
@@ -456,6 +486,7 @@ public class Listeners implements Listener {
             return;
         }
 
+        // Consome 1 caixa e inicia a roleta
         int amt = hand.getAmount();
         if (amt <= 1) p.setItemInHand(null);
         else {
@@ -466,6 +497,7 @@ public class Listeners implements Listener {
         openRoulette(p, crate);
     }
 
+    // MODO A: NÃO força reabrir inventário
     @EventHandler
     public void onClose(InventoryCloseEvent e) {
         if (!(e.getPlayer() instanceof Player)) return;
@@ -478,6 +510,10 @@ public class Listeners implements Listener {
             }
         }
     }
+
+    /* =========================
+       ROULETTE
+     ========================= */
 
     private void openRoulette(final Player p, final Crate crate) {
         opening.add(p.getUniqueId());
@@ -530,53 +566,67 @@ public class Listeners implements Listener {
                 if (spins >= stopAt) {
                     cancel();
 
-                    Reward win = getAt(strip, 4);
-                    ItemStack prize = win.item.clone();
+                    // item final (o do meio da strip)
+                    final Reward win = getAt(strip, 4);
+                    final ItemStack prize = win.item.clone();
 
+                    // limpa e mostra preview
                     for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, glass);
                     inv.setItem(4, star);
                     inv.setItem(22, star.clone());
 
-                    ItemStack preview = prize.clone();
+                    final ItemStack preview = prize.clone();
                     preview.setAmount(1);
+
                     try {
                         ItemMeta pm = preview.getItemMeta();
                         if (pm != null) {
                             List<String> lore = pm.hasLore() ? new ArrayList<String>(pm.getLore()) : new ArrayList<String>();
-                            lore.add(Util.color("&8(Preview - nao pegue)"));
+                            lore.add(Util.color("&8"));
+                            lore.add(Util.color("&7Chance: " + chanceColor(win.chance) + win.chance + "%"));
+                            lore.add(Util.color("&8(Preview - aguarde)"));
                             pm.setLore(lore);
                             preview.setItemMeta(pm);
                         }
                     } catch (Throwable ignored) {}
+
+                    // ✅ MOSTRA O ITEM NO MEIO
                     inv.setItem(13, preview);
+                    p.updateInventory();
 
-
-                    p.getInventory().addItem(prize.clone());
-
-
+                    // mensagem (só pro player)
                     try {
                         String itemName;
                         ItemMeta prizeMeta = prize.getItemMeta();
                         if (prizeMeta != null && prizeMeta.hasDisplayName()) itemName = prizeMeta.getDisplayName();
                         else itemName = prize.getType().toString();
                         int amountWon = prize.getAmount();
-                        p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&aVoce ganhou: &f" + itemName + " &ax" + amountWon + " &7(Chance: " + Util.getChanceColor(win.chance) + win.chance + "%&7)"));
+                        p.sendMessage(Util.CAIXAS_PREFIX + Util.color("&aVoce ganhou: &f" + itemName + " &ax" + amountWon
+                                + " &7(Chance: " + chanceColor(win.chance) + win.chance + "%&7)"));
                     } catch (Throwable ignored) {}
-
-                    inv.setItem(13, null);
-                    p.updateInventory();
 
                     if (win.chance < 25.0) {
                         spawnFireworks(p, 3);
                         broadcastRare(p, crate);
                     }
 
+                    // ✅ ENTREGA O PRÊMIO SÓ DEPOIS (pra não “sumir” o preview)
                     Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
                         @Override public void run() {
+                            // entrega
+                            Map<Integer, ItemStack> leftover = p.getInventory().addItem(prize.clone());
+                            if (leftover != null && !leftover.isEmpty()) {
+                                for (ItemStack rem : leftover.values()) {
+                                    p.getWorld().dropItemNaturally(p.getLocation(), rem);
+                                }
+                            }
+                            p.updateInventory();
+
+                            // fecha e libera
                             opening.remove(p.getUniqueId());
                             if (p.getOpenInventory() != null) p.closeInventory();
                         }
-                    }, 40L);
+                    }, 40L); // 2 segundos (40 ticks)
                 }
             }
         }.runTaskTimer(plugin, 1L, 1L);
@@ -603,15 +653,13 @@ public class Listeners implements Listener {
         try {
             ItemMeta meta = it.getItemMeta();
             List<String> lore = (meta != null && meta.hasLore()) ? new ArrayList<String>(meta.getLore()) : new ArrayList<String>();
+
             lore.add(Util.color("&8"));
-            lore.add(Util.color("&7Chance: " + Util.getChanceColor(r.chance) + r.chance));
-            if (r.chance < 10.0) {
-                String lbl = Util.getChanceLabel(r.chance);
-                if (lbl != null) {
-                    lore.add(Util.color("&8"));
-                    lore.add(Util.color(lbl));
-                }
-            }
+            lore.add(Util.color("&7Chance: " + chanceColor(r.chance) + r.chance + "%"));
+
+            if (r.chance < 2.0) lore.add(Util.color("&8✦ &d&lMUITO RARO &8✦"));
+            else if (r.chance < 10.0) lore.add(Util.color("&8✦ &6RARO &8✦"));
+
             if (meta != null) {
                 meta.setLore(lore);
                 it.setItemMeta(meta);
